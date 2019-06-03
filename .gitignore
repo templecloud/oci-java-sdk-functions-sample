@@ -1,2 +1,5 @@
+// These should be generate by Maven or IDE.
 bin
 target
+.classpath
+.settings/
