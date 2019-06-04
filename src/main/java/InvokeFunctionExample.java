@@ -129,7 +129,7 @@ public class InvokeFunctionExample {
         }
 
         // Depending on the image chosen a payload can be specified.
-        final String payload = System.getenv("FN_PAYLOAD");
+        final String payload = (System.getenv("FN_PAYLOAD") != null) ? System.getenv("FN_PAYLOAD") : "";
 
         // Configure Auth
         final String configurationFilePath = "~/.oci/config";
@@ -150,6 +150,7 @@ public class InvokeFunctionExample {
                 teardownResources(provider, region, compartmentId, name);
             }
         } catch (Exception e) {
+            e.printStackTrace();
             System.err.println("Error: " + e);
         }
     }
@@ -257,8 +258,10 @@ public class InvokeFunctionExample {
                 getUniqueFunctionByName(fnManagementClient, compartmentId, appName, fnName);
 
             final String response = invokeFunction(fnInvokeClient, fn, payload);
-            System.out.println("Response from function:  " + response);
-
+            if (response != null) {
+                System.out.println("Response from function:  " + response);
+            }
+            
         } finally {
             fnInvokeClient.close();     
             fnManagementClient.close();
@@ -856,6 +859,8 @@ public class InvokeFunctionExample {
                 invokeFunctionResponse.getInputStream(), StandardCharsets.UTF_8);
 
         } catch (final Exception e) {
+            e.printStackTrace();
+            System.err.println("Failed to invoke function: " + e);
             throw e;
         }
 
