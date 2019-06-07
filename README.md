@@ -47,7 +47,7 @@ You will need [Apache Maven](https://maven.apache.org/) installed locally in ord
 
 3. __Export OCIR_FN_IMAGE__ : Run `export OCIR_FN_IMAGE=${your-ocir-function-image}` to define the Function image to use.
 
-4. __Export FN_PAYLOAD [optional]__ : Run `export FN_PAYLOAD=${your-funciton-payload}` to ddefine a payload for your Function.
+4. __Export FN_PAYLOAD [optional]__ : Run `export FN_PAYLOAD=${your-function-payload}` to ddefine a payload for your Function.
 
 5. __Create OCI Resources__ : Run `make run-setup` to create all the required OCI resources to invoke a Function: `VCN`, `Internet Gateway`, `Outbound Route`, `Subnet`, `Application`, and `Function`.
 
@@ -59,6 +59,17 @@ You will need [Apache Maven](https://maven.apache.org/) installed locally in ord
 
     > NB: Do not try to perform this until after 30 minutes from your last function invocation. Currently, the Function platform expects a grace period before cleaning up resources.
 
+---
 
+## Other Resources
 
+* [Fn Project](https://github.com/fnproject)
+
+* [OCI Docs](https://docs.cloud.oracle.com/iaas/Content/home.htm)
+
+* [Java SDK](https://docs.cloud.oracle.com/iaas/Content/API/SDKDocs/javasdk.htm)
+
+* [Sample code to invoke a Function by ID using Java SDK](https://github.com/shaunsmith/fn-java-sdk-invokebyid)
+
+* [Sample code to invoke a Function by Name using Java SDK](https://github.com/abhirockzz/fn-java-sdk-invoke)
 
