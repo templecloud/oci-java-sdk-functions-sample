@@ -9,24 +9,40 @@ import com.oracle.bmc.Region;
 import com.oracle.bmc.auth.AuthenticationDetailsProvider;
 import com.oracle.bmc.auth.ConfigFileAuthenticationDetailsProvider;
 import com.oracle.bmc.core.VirtualNetworkClient;
+import com.oracle.bmc.core.model.CreateInternetGatewayDetails;
 import com.oracle.bmc.core.model.CreateSubnetDetails;
 import com.oracle.bmc.core.model.CreateVcnDetails;
+import com.oracle.bmc.core.model.InternetGateway;
+import com.oracle.bmc.core.model.RouteRule;
+import com.oracle.bmc.core.model.RouteRule.DestinationType;
+import com.oracle.bmc.core.model.RouteTable;
 import com.oracle.bmc.core.model.Subnet;
+import com.oracle.bmc.core.model.UpdateRouteTableDetails;
 import com.oracle.bmc.core.model.Vcn;
+import com.oracle.bmc.core.requests.CreateInternetGatewayRequest;
 import com.oracle.bmc.core.requests.CreateSubnetRequest;
 import com.oracle.bmc.core.requests.CreateVcnRequest;
+import com.oracle.bmc.core.requests.DeleteInternetGatewayRequest;
 import com.oracle.bmc.core.requests.DeleteSubnetRequest;
 import com.oracle.bmc.core.requests.DeleteVcnRequest;
+import com.oracle.bmc.core.requests.GetInternetGatewayRequest;
 import com.oracle.bmc.core.requests.GetSubnetRequest;
 import com.oracle.bmc.core.requests.GetVcnRequest;
+import com.oracle.bmc.core.requests.ListInternetGatewaysRequest;
+import com.oracle.bmc.core.requests.ListRouteTablesRequest;
 import com.oracle.bmc.core.requests.ListSubnetsRequest;
 import com.oracle.bmc.core.requests.ListVcnsRequest;
+import com.oracle.bmc.core.requests.UpdateRouteTableRequest;
+import com.oracle.bmc.core.responses.CreateInternetGatewayResponse;
 import com.oracle.bmc.core.responses.CreateSubnetResponse;
 import com.oracle.bmc.core.responses.CreateVcnResponse;
 import com.oracle.bmc.core.responses.GetSubnetResponse;
 import com.oracle.bmc.core.responses.GetVcnResponse;
+import com.oracle.bmc.core.responses.ListInternetGatewaysResponse;
+import com.oracle.bmc.core.responses.ListRouteTablesResponse;
 import com.oracle.bmc.core.responses.ListSubnetsResponse;
 import com.oracle.bmc.core.responses.ListVcnsResponse;
+import com.oracle.bmc.core.responses.UpdateRouteTableResponse;
 import com.oracle.bmc.functions.FunctionsInvokeClient;
 import com.oracle.bmc.functions.FunctionsManagementClient;
 import com.oracle.bmc.functions.model.Application;
@@ -77,32 +93,32 @@ public class InvokeFunctionExample {
      * Function and publish it to OCIR. The best way to do this is with the 'Fn
      * CLI':
      * 
-     * 1. Install Fn CLI : https://github.com/fnproject/cli 
+     * 1. Install Fn CLI : https://github.com/fnproject/cli
      * 
-     * 2. Create Function -
-     *  Quick Guide : https://github.com/fnproject/fn/blob/master/README.md
+     * 2. Create Function - Quick Guide :
+     * https://github.com/fnproject/fn/blob/master/README.md
      * 
      * ---
      * 
      * This sample will do following things:
      * 
      * 1. Create VCN and subnets - Provide an endpoint on which your function can be
-     * invoke. 
+     * invoke.
      * 
-     * 2. Create Application and Function - Register and configure your
-     * function. 
+     * 2. Create Application and Function - Register and configure your function.
      * 
-     * 3. Invoke Function - How your function can be invoked. 
+     * 3. Invoke Function - How your function can be invoked.
      * 
      * 4. Clean-up - Tidy up the resources created above.
      * 
-     * > NB:  To simplify things, this example is hardcoded to the 'us-phoenix-1' OCI
-     *        region.
+     * > NB: To simplify things, this example is hardcoded to the 'us-phoenix-1' OCI
+     * region.
      * 
-     * > NB: Currently, after invoking a function we must wait 30 minutes before 
-     *       clearing down any supporting Subnets and VCN.
+     * > NB: Currently, after invoking a function we must wait 30 minutes before
+     * clearing down any supporting Subnets and VCN.
      * 
-     * @param args to control setting up, invoking, and, cleaning up function resources.
+     * @param args to control setting up, invoking, and, cleaning up function
+     *             resources.
      * @throws Exception
      */
     public static void main(String[] args) throws Exception {
@@ -119,24 +135,26 @@ public class InvokeFunctionExample {
         // We need a target compartment.
         final String compartmentId = System.getenv("COMPARTMENT_ID");
 
-        // We need an accessible image in the pheonix region to invoke. 
+        // We need an accessible image in the pheonix region to invoke.
         // e.g. phx.ocir.io/tenancy-name/registry/imagename:version
         final String image = System.getenv("OCIR_FN_IMAGE");
 
         if (compartmentId == null) {
             throw new Exception(
-                "Please ensure you have set the mandatory environment variables - COMPARTMENT_ID, OCIR_FN_IMAGE");
+                "Please set the mandatory environment variables - COMPARTMENT_ID, OCIR_FN_IMAGE");
         }
 
         // Depending on the image chosen a payload can be specified.
-        final String payload = (System.getenv("FN_PAYLOAD") != null) ? System.getenv("FN_PAYLOAD") : "";
+        final String payload = (System.getenv("FN_PAYLOAD") != null) 
+            ? System.getenv("FN_PAYLOAD") 
+            : "";
 
         // Configure Auth
         final String configurationFilePath = "~/.oci/config";
         final String profile = "DEFAULT";
-        final AuthenticationDetailsProvider provider =
+        final AuthenticationDetailsProvider provider = 
             new ConfigFileAuthenticationDetailsProvider(configurationFilePath, profile);
-        
+
         try {
             if (commands.contains(SETUP)) {
                 setupResources(provider, region, compartmentId, name, image);
@@ -158,19 +176,21 @@ public class InvokeFunctionExample {
     /**
      * Create all the OCI and Fn resources required to invoke a function.
      *
-     * @param provider the OCI credentials provider. 
-     * @param region the OCI region in which to create the required resources.
-     * @param compartmentId the compartment in which to created the required resources.
-     * @param name a name prefix to easilly identifty the resources.
-     * @param image a valid OCIR image for the function.
+     * @param provider      the OCI credentials provider.
+     * @param region        the OCI region in which to create the required
+     *                      resources.
+     * @param compartmentId the compartment in which to created the required
+     *                      resources.
+     * @param name          a name prefix to easilly identifty the resources.
+     * @param image         a valid OCIR image for the function.
      * @throws Exception
      */
     public static void setupResources(
-            final AuthenticationDetailsProvider provider, 
-            final Region region, 
-            final String compartmentId,
-            final String name,
-            final String image
+        final AuthenticationDetailsProvider provider, 
+        final Region region,
+        final String compartmentId, 
+        final String name, 
+        final String image
         ) throws Exception {
 
         final Identity identityClient = new IdentityClient(provider);
@@ -179,15 +199,15 @@ public class InvokeFunctionExample {
         final VirtualNetworkClient vcnClient = new VirtualNetworkClient(provider);
         vcnClient.setRegion(region);
 
-        final FunctionsManagementClient fnManagementClient = new FunctionsManagementClient(provider);
-        fnManagementClient.setRegion(region);
-
-        final FunctionsInvokeClient fnInvokeClient = new FunctionsInvokeClient(provider);
+        final FunctionsManagementClient fnManagementClient 
+            = new FunctionsManagementClient(provider);
         fnManagementClient.setRegion(region);
 
         try {
-            // 1. A list of AvailabiityDomains are required to determine where to host each subnet.
-            final List<AvailabilityDomain> availabilityDomains = getAvailabilityDomains(identityClient, compartmentId);
+            // 1. A list of AvailabiityDomains are required to determine where to host each
+            // subnet.
+            final List<AvailabilityDomain> availabilityDomains = 
+                getAvailabilityDomains(identityClient, compartmentId);
             final AvailabilityDomain ad = availabilityDomains.get(0);
             System.out.printf("Using availability domain: " + ad.getName() + "\n");
 
@@ -197,29 +217,40 @@ public class InvokeFunctionExample {
             final Vcn vcn = createVcn(vcnClient, compartmentId, vcnDisplayName, vcnCidrBlock);
             System.out.println("Created VCN: " + vcn.getDisplayName());
 
-            // 3. A subnet is required to expose and be able invoke the function.
-            // In multiple AD regions, subnets can be created in multiple ADs to provide redundency.
+            // 3. An Internet Gateway is required to enable the VCN to talk to the wider world.
+            final String igDisplayName = igName(name);
+            final InternetGateway ig = 
+                createInternetGateway(vcnClient, compartmentId, igDisplayName, vcn.getId());
+
+            // 4. We must configure the VCN's traffics to be routed through the IG.
+            final String drtDisplayName = drtName(name);
+            configureInternetGateway(vcnClient, compartmentId,  vcn.getId(), ig.getId(), drtDisplayName);
+
+            // 5. A subnet is required to expose and be able invoke the function.
+            // In multiple AD regions, subnets can be created in multiple ADs to provide
+            // redundency.
             final String subnetDisplayName = subnetName(name);
             final String subnetCidrBlock = "10.0.0.0/24";
-            final Subnet subnet = createSubnet(vcnClient, compartmentId, vcn.getId(), subnetDisplayName, ad.getName(), subnetCidrBlock);
+            final Subnet subnet = 
+                createSubnet(vcnClient, compartmentId, vcn.getId(), subnetDisplayName, ad.getName(), subnetCidrBlock);
             System.out.println("Created VCN subnet: " + subnet.getDisplayName());
 
-            // 4. Create an Application to host and manage the function.
+            // 6. Create an Application to host and manage the function(s).
             final String appDisplayName = applicationName(name);
             final List<String> subnetIds = new ArrayList<>();
             subnetIds.add(subnet.getId());
             final Application app = createApplication(fnManagementClient, compartmentId, appDisplayName, subnetIds);
             System.out.println("Created Application: " + app.getDisplayName());
 
-            // 5. Create a Function, set its execution image and limits.
+            // 7. Create a single Function, set its execution image and limits.
             final String fnDisplayName = functionName(name);
             final long memoryInMBs = 128L;
             final int timeoutInSeconds = 30;
-            final Function fn = createFunction(fnManagementClient, app.getId(), fnDisplayName, image, memoryInMBs, timeoutInSeconds);
+            final Function fn = 
+                createFunction(fnManagementClient, app.getId(), fnDisplayName, image, memoryInMBs, timeoutInSeconds);
             System.out.println("Created Function: " + fn.getDisplayName());
 
         } finally {
-            fnInvokeClient.close();     
             fnManagementClient.close();
             vcnClient.close();
             identityClient.close();
@@ -229,29 +260,30 @@ public class InvokeFunctionExample {
     /**
      * Create all the OCI and Fn resources required to invoke a function.
      *
-     * @param provider the OCI credentials provider. 
-     * @param region the OCI region in which to create the required resources.
-     * @param compartmentId the compartment in which to created the required resources.
-     * @param name a name prefix to easilly identifty the resources.
-     * @param image a valid OCIR image for the function.
-     * @throws Exception 
+     * @param provider      the OCI credentials provider.
+     * @param region        the OCI region in which to create the required
+     *                      resources.
+     * @param compartmentId the compartment in which to created the required
+     *                      resources.
+     * @param name          a name prefix to easilly identifty the resources.
+     * @param image         a valid OCIR image for the function.
+     * @throws Exception
      */
     public static void invokeFunction(
-            final AuthenticationDetailsProvider provider, 
-            final Region region, 
-            final String compartmentId,
-            final String name,
-            final String payload
+        final AuthenticationDetailsProvider provider, 
+        final Region region,
+        final String compartmentId, 
+        final String name, 
+        final String payload
         ) throws Exception {
 
         final FunctionsManagementClient fnManagementClient = new FunctionsManagementClient(provider);
         fnManagementClient.setRegion(region);
 
         final FunctionsInvokeClient fnInvokeClient = new FunctionsInvokeClient(provider);
-        fnManagementClient.setRegion(region);
 
         try {
-            // 6. Invoke the function!
+            // Invoke the function!
             final String appName = applicationName(name);
             final String fnName = functionName(name);
             final FunctionSummary fn = 
@@ -261,9 +293,8 @@ public class InvokeFunctionExample {
             if (response != null) {
                 System.out.println("Response from function:  " + response);
             }
-            
         } finally {
-            fnInvokeClient.close();     
+            fnInvokeClient.close();
             fnManagementClient.close();
         }
     }
@@ -271,20 +302,23 @@ public class InvokeFunctionExample {
     /**
      * Create all the OCI and Fn resources required to invoke a function.
      * 
-     * NB: Resources can only be removed 30 minutes after the last Function invocation.
+     * NB: Resources can only be removed 30 minutes after the last Function
+     * invocation.
      *
-     * @param provider the OCI credentials provider. 
-     * @param region the OCI region in which to create the required resources.
-     * @param compartmentId the compartment in which to created the required resources.
-     * @param name a name prefix to easilly identifty the resources.
-     * @param image a valid OCIR image for the function.
-     * @throws Exception 
+     * @param provider      the OCI credentials provider.
+     * @param region        the OCI region in which to create the required
+     *                      resources.
+     * @param compartmentId the compartment in which to created the required
+     *                      resources.
+     * @param name          a name prefix to easilly identifty the resources.
+     * @param image         a valid OCIR image for the function.
+     * @throws Exception
      */
     public static void teardownResources(
-            final AuthenticationDetailsProvider provider, 
-            final Region region, 
-            final String compartmentId,
-            final String name
+        final AuthenticationDetailsProvider provider, 
+        final Region region,
+        final String compartmentId, 
+        final String name
         ) throws Exception {
 
         final Identity identityClient = new IdentityClient(provider);
@@ -296,22 +330,31 @@ public class InvokeFunctionExample {
         final FunctionsManagementClient fnManagementClient = new FunctionsManagementClient(provider);
         fnManagementClient.setRegion(region);
 
-        final FunctionsInvokeClient fnInvokeClient = new FunctionsInvokeClient(provider);
-        fnManagementClient.setRegion(region);
-
         try {
             System.out.println("Cleaning up");
 
             final String vcnName = vcnName(name);
+            final String igName = igName(name);
+            final String drtName = drtName(name);
             final String subnetName = subnetName(name);
             final String appName = applicationName(name);
             final String fnName = functionName(name);
 
-            final Vcn vcn = getUniqueVcnByName(vcnClient, compartmentId, vcnName);
+            final Vcn vcn = 
+                getUniqueVcnByName(vcnClient, compartmentId, vcnName);
+
+            final InternetGateway ig = 
+                getUniqueInternetGatewayByName(vcnClient, compartmentId, vcn.getId(), igName);
+            
+            final RouteTable rt = 
+                getUniqueRouteTableByName(vcnClient, compartmentId, vcn.getId(), drtName);
+
             final Subnet subnet = 
                 getUniqueSubnetByName(vcnClient, compartmentId, vcn.getId(), subnetName);
+
             final ApplicationSummary application = 
                 getUniqueApplicationByName(fnManagementClient, compartmentId, appName);
+
             final FunctionSummary fn = 
                 getUniqueFunctionByName(fnManagementClient, application.getId(), fnName);
 
@@ -330,13 +373,22 @@ public class InvokeFunctionExample {
                 System.out.println("Deleted subnet: " + subnet.getDisplayName());
             }
 
+            if (rt != null) {
+                prepareDefaultRouteTableForDelete(vcnClient, rt.getId());
+                System.out.println("Cleaned route table: " + subnet.getDisplayName());
+            }
+
+            if (ig != null) {
+                deleteInternetGateway(vcnClient, ig.getId());
+                System.out.println("Deleted internet gateway: " + subnet.getDisplayName());
+            }
+
             if (vcn != null) {
                 deleteVcn(vcnClient, vcn);
                 System.out.println("Deleted VCN: " + vcn.getDisplayName());
             }
 
         } finally {
-            fnInvokeClient.close();     
             fnManagementClient.close();
             vcnClient.close();
             identityClient.close();
@@ -348,23 +400,22 @@ public class InvokeFunctionExample {
     /**
      * List the AvailabilityDomains.
      *
-     * @param identityClient the service client to use to fetch the AvailabilityDomains. 
-     * @param compartmentId the OCID of the compartment to check.
+     * @param identityClient the service client to use to fetch the
+     *                       AvailabilityDomains.
+     * @param compartmentId  the OCID of the compartment to check.
      * @return the list of AvailabilityDomains.
      * @throws Exception
      */
     public static List<AvailabilityDomain> getAvailabilityDomains(
-            final Identity identityClient, 
-            final String compartmentId
+        final Identity identityClient,
+        final String compartmentId
         ) throws Exception {
 
-        final ListAvailabilityDomainsResponse listAvailabilityDomainsResponse =
+        final ListAvailabilityDomainsResponse listAvailabilityDomainsResponse = 
             identityClient.listAvailabilityDomains(
-                    ListAvailabilityDomainsRequest.builder()
-                        .compartmentId(compartmentId)
-                        .build());
-
-        identityClient.close();
+                ListAvailabilityDomainsRequest.builder()
+                    .compartmentId(compartmentId)
+                    .build());
 
         return listAvailabilityDomainsResponse.getItems();
     }
@@ -374,21 +425,23 @@ public class InvokeFunctionExample {
     /**
      * Creates a VCN and waits for it to become available to use.
      *
-     * @param vcnClient the service client to use to create the VCN.
-     * @param compartmentId the OCID of the compartment where the VCN will be created.
-     * @param availabilityDomain the availability domain where the subnet will be created.
-     * @param cidrBlock the CidrBlock allocated for the VCN.
+     * @param vcnClient          the service client to use to create the VCN.
+     * @param compartmentId      the OCID of the compartment where the VCN will be
+     *                           created.
+     * @param availabilityDomain the availability domain where the subnet will be
+     *                           created.
+     * @param cidrBlock          the CidrBlock allocated for the VCN.
      * @return the created VCN.
      * @throws Exception
      */
     private static Vcn createVcn(
-            final VirtualNetworkClient vcnClient, 
-            final String compartmentId,
-            final String displayName,
-            final String cidrBlock
+        final VirtualNetworkClient vcnClient, 
+        final String compartmentId,
+        final String displayName, 
+        final String cidrBlock
         ) throws Exception {
 
-        final CreateVcnResponse createVcnResponse =
+        final CreateVcnResponse createVcnResponse = 
             vcnClient.createVcn(
                 CreateVcnRequest.builder()
                     .createVcnDetails(
@@ -397,9 +450,9 @@ public class InvokeFunctionExample {
                             .displayName(displayName)
                             .cidrBlock(cidrBlock)
                             .build())
-                    .build());
+                        .build());
 
-        final GetVcnResponse getVcnResponse =
+        final GetVcnResponse getVcnResponse = 
             vcnClient.getWaiters()
                 .forVcn(
                     GetVcnRequest.builder()
@@ -414,16 +467,16 @@ public class InvokeFunctionExample {
     /**
      * Gets VCN info of a single uniquely named VCN in the specified compartment.
      * 
-     * @param vcnClient the service client to use to query the VCN.
-     * @param compartmentId of the VCN.
+     * @param vcnClient      the service client to use to query the VCN.
+     * @param compartmentId  of the VCN.
      * @param vcnDisplayName of the VCN.
-     * @return the VCN.
-     * @throws Exception 
+     * @return               the VCN.
+     * @throws Exception
      */
     public static Vcn getUniqueVcnByName(
-            final VirtualNetworkClient vcnClient, 
-            final String compartmentId, 
-            final String vcnDisplayName
+        final VirtualNetworkClient vcnClient, 
+        final String compartmentId,
+        final String vcnDisplayName
         ) throws Exception {
 
         // Find the application in a specific compartment
@@ -437,8 +490,8 @@ public class InvokeFunctionExample {
 
         if (listVcnsResponse.getItems().size() != 1) {
             throw new Exception(
-                    "Could not find unique VCN with name " 
-                    + vcnDisplayName + " in compartment " + compartmentId);
+                "Could not find unique VCN with name " + vcnDisplayName +
+                " in compartment " + compartmentId);
         }
 
         return listVcnsResponse.getItems().get(0);
@@ -448,19 +501,231 @@ public class InvokeFunctionExample {
      * Deletes a VCN and waits for it to be deleted.
      *
      * @param vcnClient the service client to use to delete the VCN.
-     * @param vcn the VCN to delete.
+     * @param vcn       the VCN to delete.
      * @throws Exception
      */
-    private static void deleteVcn(final VirtualNetworkClient vcnClient, final Vcn vcn)
-            throws Exception {
+    private static void deleteVcn(
+        final VirtualNetworkClient vcnClient, 
+        final Vcn vcn
+        ) throws Exception {
 
-        vcnClient.deleteVcn(DeleteVcnRequest.builder().vcnId(vcn.getId()).build());
+        vcnClient.deleteVcn(
+            DeleteVcnRequest.builder()
+                .vcnId(vcn.getId())
+                .build());
 
         vcnClient.getWaiters()
             .forVcn(
-                GetVcnRequest.builder().vcnId(vcn.getId()).build(),
+                GetVcnRequest.builder()
+                    .vcnId(vcn.getId())
+                    .build(), 
                 Vcn.LifecycleState.Terminated)
             .execute();
+    }
+
+    // === OCI Internet Gateway Helpers ===
+
+    private static InternetGateway createInternetGateway(
+        final VirtualNetworkClient vcnClient,
+        final String compartmentId, 
+        final String displayName, 
+        final String vcnId
+        ) throws Exception {
+
+        final CreateInternetGatewayResponse createInternetGatewayResponse = 
+            vcnClient.createInternetGateway(
+                CreateInternetGatewayRequest.builder()
+                    .createInternetGatewayDetails(
+                        CreateInternetGatewayDetails.builder()
+                            .compartmentId(compartmentId)
+                            .displayName(displayName)
+                            .vcnId(vcnId)
+                            .isEnabled(true)
+                            .build())
+                .build());
+
+        vcnClient.getWaiters()
+            .forInternetGateway(
+                GetInternetGatewayRequest.builder()
+                    .igId(createInternetGatewayResponse.getInternetGateway().getId()).build(),
+                        InternetGateway.LifecycleState.Available)
+                .execute();
+
+        return createInternetGatewayResponse.getInternetGateway();
+    }
+
+    /**
+     * Gets InternetGateway info of a single uniquely named InternetGateway in the
+     * specified compartment.
+     * 
+     * @param vcnClient     the service client to use to query the InternetGateway.
+     * @param compartmentId of the InternetGateway.
+     * @param vcnId         of the InternetGateway's associated VCN.
+     * @param igDisplayName of the InternetGateway.
+     * @return the InternetGateway.
+     * @throws Exception
+     */
+    public static InternetGateway getUniqueInternetGatewayByName(
+        final VirtualNetworkClient vcnClient,
+        final String compartmentId, 
+        final String vcnId, 
+        final String igDisplayName
+        ) throws Exception {
+
+        // Find the application in a specific compartment
+        final ListInternetGatewaysRequest listInternetGatewaysRequest = 
+            ListInternetGatewaysRequest.builder()
+                .compartmentId(compartmentId)
+                .vcnId(vcnId)
+                .displayName(igDisplayName)
+                .build();
+
+        final ListInternetGatewaysResponse listInternetGatewaysResponse = 
+            vcnClient.listInternetGateways(listInternetGatewaysRequest);
+
+        if (listInternetGatewaysResponse.getItems().size() != 1) {
+            throw new Exception(
+                "Could not find unique InternetGateway with name " + igDisplayName + 
+                " in compartment "+ compartmentId);
+        }
+
+        return listInternetGatewaysResponse.getItems().get(0);
+    }
+
+    /**
+     * Deletes a InternetGateway and waits for it to be deleted.
+     *
+     * @param vcnClient the service client to use to delete the InternetGateway.
+     * @param igId      the InternetGateway to delete.
+     * @throws Exception
+     */
+    private static void deleteInternetGateway(
+        final VirtualNetworkClient vcnClient, 
+        final String igId
+        ) throws Exception {
+
+        vcnClient.deleteInternetGateway(
+            DeleteInternetGatewayRequest.builder()
+                .igId(igId)
+                .build());
+
+        vcnClient.getWaiters().forInternetGateway(
+            GetInternetGatewayRequest.builder()
+                .igId(igId)
+                .build(), InternetGateway.LifecycleState.Terminated).execute();
+    }
+
+    // === OCI Route Table Helpers ===
+
+    /**
+     * Configure the default RouteTable of the specified InternetGateway to ensure it 
+     * contains a single outbound route for all traffic.
+     * 
+     * NB: You should restrict these routes further if you keep this piece of 
+     *     OCI infrastructure.
+     * 
+     * @param vcnClient     the service client to use to query a RouteTable.
+     * @param compartmentId of the RouteTable.
+     * @param vcnId         of the RouteTable's associated VCN.
+     * @param igId          of the RouteTable's associated InternetGateway.
+     * @param rtDisplayName of the RouteTable.
+     * @return the InternetGateway.
+     * @throws Exception
+     */
+    private static RouteTable configureInternetGateway(
+        final VirtualNetworkClient vcnClient,
+            final String compartmentId,
+            final String vcnId,
+            final String igId,
+            final String drtDisplayName
+        ) throws Exception {
+
+        final RouteTable defaultRouteTable = getUniqueRouteTableByName(
+            vcnClient, compartmentId, vcnId, drtDisplayName);
+
+        final String destinationCidr="0.0.0.0/0";
+        final List<RouteRule> routeRules = defaultRouteTable.getRouteRules();
+        routeRules.add(
+            RouteRule.builder()
+                .cidrBlock(destinationCidr)
+                .destination(destinationCidr)
+                .destinationType(DestinationType.valueOf("CidrBlock"))
+                .networkEntityId(igId)
+                .build()      
+        );
+
+        final UpdateRouteTableResponse updateRouteTableResponse = 
+            vcnClient.updateRouteTable(
+                UpdateRouteTableRequest.builder()
+                    .rtId(defaultRouteTable.getId())
+                    .updateRouteTableDetails(
+                        UpdateRouteTableDetails.builder()
+                            .routeRules(routeRules)
+                            .build())
+                    .build());
+
+        return updateRouteTableResponse.getRouteTable();
+    }
+
+    /**
+     * Gets RouteTable info of a single uniquely named RouteTable in the
+     * specified compartment.
+     * 
+     * @param vcnClient     the service client to use to query a RouteTable.
+     * @param compartmentId of the RouteTable.
+     * @param vcnId         of the RouteTable's associated VCN.
+     * @param rtDisplayName of the RouteTable.
+     * @return the InternetGateway.
+     * @throws Exception
+     */
+    public static RouteTable getUniqueRouteTableByName(
+            final VirtualNetworkClient vcnClient,
+            final String compartmentId, 
+            final String vcnId, 
+            final String rtDisplayName
+        ) throws Exception {
+
+        // Find the route table in a specific compartment
+        final ListRouteTablesRequest listRouteTablesRequest = 
+            ListRouteTablesRequest.builder()
+                .compartmentId(compartmentId)
+                .vcnId(vcnId)
+                .displayName(rtDisplayName)
+                .build();
+
+        final ListRouteTablesResponse listRouteTablesResponse = 
+            vcnClient.listRouteTables(listRouteTablesRequest);
+
+        if (listRouteTablesResponse.getItems().size() != 1) {
+            throw new Exception(
+                    "Could not find unique RouteTable with name " 
+                    + rtDisplayName + " in compartment " + compartmentId);
+        }
+
+        return listRouteTablesResponse.getItems().get(0);
+    }
+
+
+    /**
+     * Prepares a DefaultRouteTable for deletion by deleting all RouteRules.
+     *
+     * @param vcnClient the service client to use to delete the RouteTable.
+     * @param rtId      the RouteTable to delete.
+     * @throws Exception
+     */
+    private static void prepareDefaultRouteTableForDelete(
+        final VirtualNetworkClient vcnClient, 
+        final String rtId
+        ) throws Exception {
+
+        vcnClient.updateRouteTable(
+            UpdateRouteTableRequest.builder()
+                .rtId(rtId)
+                .updateRouteTableDetails(
+                    UpdateRouteTableDetails.builder()
+                        .routeRules(new ArrayList<RouteRule>())
+                        .build())
+                .build());
     }
 
     // === OCI Subnet Helpers ===
@@ -478,12 +743,12 @@ public class InvokeFunctionExample {
      * @throws Exception
      */
     private static Subnet createSubnet(
-            final VirtualNetworkClient vcnClient,
-            final String compartmentId,
-            final String vcnId,
-            final String displayName,
-            final String availabilityDomainName,
-            final String subnetCidrBlock
+        final VirtualNetworkClient vcnClient,
+        final String compartmentId,
+        final String vcnId,
+        final String displayName,
+        final String availabilityDomainName,
+        final String subnetCidrBlock
         ) throws Exception {
 
         // Create the subnet
@@ -502,8 +767,7 @@ public class InvokeFunctionExample {
 
         // Wait for the subnet to be active
         final GetSubnetResponse getSubnetResponse =
-            vcnClient
-                .getWaiters()
+            vcnClient.getWaiters()
                 .forSubnet(
                     GetSubnetRequest.builder()
                         .subnetId(createSubnetResponse.getSubnet().getId())
@@ -543,8 +807,8 @@ public class InvokeFunctionExample {
 
         if (listSubnetsResponse.getItems().size() != 1) {
             throw new Exception(
-                    "Could not find unique subnet with name " 
-                    + subnetDisplayName + " in compartment " + compartmentId);
+                "Could not find unique subnet with name " 
+                + subnetDisplayName + " in compartment " + compartmentId);
         }
 
         return listSubnetsResponse.getItems().get(0);
@@ -559,8 +823,8 @@ public class InvokeFunctionExample {
      * @throws Exception
      */
     private static void deleteSubnet(
-            final VirtualNetworkClient vcnClient, 
-            final String subnetId
+        final VirtualNetworkClient vcnClient, 
+        final String subnetId
         ) throws Exception {
 
         final int DELETE_SUBNET_ATTEMPTS = 5;
@@ -587,7 +851,9 @@ public class InvokeFunctionExample {
         // Wait for 'Terminated' state.
         vcnClient.getWaiters()
             .forSubnet(
-                GetSubnetRequest.builder().subnetId(subnetId).build(),
+                GetSubnetRequest.builder()
+                    .subnetId(subnetId)
+                    .build(),
                 Subnet.LifecycleState.Terminated)
             .execute();
     }
@@ -605,10 +871,10 @@ public class InvokeFunctionExample {
      * @throws Exception if there is an error waiting on the application to become available to use.
      */
     private static Application createApplication(
-            final FunctionsManagementClient fnManagementClient,
-            final String compartmentId,
-            final String displayName,
-            final List<String> subnetIds
+        final FunctionsManagementClient fnManagementClient,
+        final String compartmentId,
+        final String displayName,
+        final List<String> subnetIds
         ) throws Exception {
 
         // Create a new Application.
@@ -647,9 +913,9 @@ public class InvokeFunctionExample {
      * @throws Exception 
      */
     public static ApplicationSummary getUniqueApplicationByName(
-            final FunctionsManagementClient fnManagementClient,
-            final String compartmentId, 
-            final String applicationDisplayName
+        final FunctionsManagementClient fnManagementClient,
+        final String compartmentId, 
+        final String applicationDisplayName
         ) throws Exception {
 
         // Find the application in a specific compartment
@@ -680,12 +946,15 @@ public class InvokeFunctionExample {
      * @throws Exception if there is an error waiting on the Application to be deleted.
      */
     private static void deleteApplication(
-            final FunctionsManagementClient fnManagementClient,
-            final String applicationId
+        final FunctionsManagementClient fnManagementClient,
+        final String applicationId
         ) throws Exception {
 
         // Delete the specified Application
-        fnManagementClient.deleteApplication(DeleteApplicationRequest.builder().applicationId(applicationId).build());
+        fnManagementClient.deleteApplication(
+            DeleteApplicationRequest.builder()
+                .applicationId(applicationId)
+                .build());
 
         // Wait for the 'Deleted' status.
         fnManagementClient.getWaiters()
@@ -710,12 +979,12 @@ public class InvokeFunctionExample {
      * @throws Exception
      */
     private static Function createFunction(
-            final FunctionsManagementClient fnManagementClient,
-            final String applicationId,
-            final String displayName,
-            final String image,
-            final long memoryInMBs,
-            final int timeoutInSeconds
+        final FunctionsManagementClient fnManagementClient,
+        final String applicationId,
+        final String displayName,
+        final String image,
+        final long memoryInMBs,
+        final int timeoutInSeconds
         ) throws Exception {
 
         // Create a new Function.
@@ -734,8 +1003,7 @@ public class InvokeFunctionExample {
 
         // Wait for Function to be in 'Active' state.
         final GetFunctionResponse getFunctionResponse =
-            fnManagementClient
-                .getWaiters()
+            fnManagementClient.getWaiters()
                 .forFunction(
                     GetFunctionRequest.builder()
                         .functionId(createFunctionResponse.getFunction().getId())
@@ -757,10 +1025,10 @@ public class InvokeFunctionExample {
      * @throws Exception
      */
     public static FunctionSummary getUniqueFunctionByName(
-            final FunctionsManagementClient fnManagementClient,
-            final String compartmentId,
-            final String applicationDisplayName, 
-            final String functionDisplayName
+        final FunctionsManagementClient fnManagementClient,
+        final String compartmentId,
+        final String applicationDisplayName, 
+        final String functionDisplayName
         ) throws Exception {
         final ApplicationSummary application = 
             getUniqueApplicationByName(fnManagementClient, compartmentId, applicationDisplayName);
@@ -777,9 +1045,9 @@ public class InvokeFunctionExample {
      * @throws Exception
      */
     public static FunctionSummary getUniqueFunctionByName(
-            final FunctionsManagementClient fnManagementClient,
-            final String applicationId, 
-            final String functionDisplayName
+        final FunctionsManagementClient fnManagementClient,
+        final String applicationId, 
+        final String functionDisplayName
         ) throws Exception {
 
         final ListFunctionsRequest listFunctionsRequest = 
@@ -807,11 +1075,11 @@ public class InvokeFunctionExample {
      * @throws Exception
      */
     private static void deleteFunction(
-            final FunctionsManagementClient fnManagementClient,
-            final String functionId
+        final FunctionsManagementClient fnManagementClient,
+        final String functionId
         ) throws Exception {
 
-        // Delete the specified Function
+        // Delete the specified Function.
         fnManagementClient.deleteFunction(DeleteFunctionRequest.builder().functionId(functionId).build());
 
         // Wait for the 'Deleted' status.
@@ -832,9 +1100,9 @@ public class InvokeFunctionExample {
      * @throws Exception if there is an error when invoking the function.
      */
     private static String invokeFunction(
-            final FunctionsInvokeClient fnInvokeClient,
-            final FunctionSummary fn,
-            final String payload
+        final FunctionsInvokeClient fnInvokeClient,
+        final FunctionSummary fn,
+        final String payload
         ) throws Exception {
         String response;
         try {
@@ -871,6 +1139,14 @@ public class InvokeFunctionExample {
 
     private static String vcnName(final String name) {
         return name + "-vcn";
+    }
+
+    private static String igName(final String name) {
+        return name + "-ig";
+    }
+
+    private static String drtName(final String name) {
+        return "Default Route Table for " + name + "-vcn";
     }
 
     private static String subnetName(final String name) {

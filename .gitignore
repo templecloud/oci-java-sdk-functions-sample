@@ -1,5 +1,6 @@
 // These should be generate by Maven or IDE.
-bin
-target
-.classpath
+bin/
+target/
 .settings/
+.vscode/
+.classpath
